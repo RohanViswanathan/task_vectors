@@ -1,4 +1,5 @@
 import torch
+import copy
 
 
 class TaskVector():
@@ -16,7 +17,7 @@ class TaskVector():
             if model_input:
                 with torch.no_grad():
                     pretrained_state_dict = pretrained_checkpoint.state_dict()
-                    finetuned_state_dict = pretrained_checkpoint.state_dict()
+                    finetuned_state_dict = finetuned_checkpoint.state_dict()
                     self.vector = {}
                     for key in pretrained_state_dict:
                         if pretrained_state_dict[key].dtype in [torch.int64, torch.uint8]:
@@ -57,28 +58,29 @@ class TaskVector():
         return TaskVector(vector=new_vector)
 
     def apply_to(self, pretrained_checkpoint, scaling_coef=1.0, model_input=False):
-        """Apply a task vector to a pretrained model."""
+        """Apply a task vector to a pretrained model without mutating the original."""
         if model_input:
             with torch.no_grad():
-                pretrained_model = pretrained_checkpoint
+                model = copy.deepcopy(pretrained_checkpoint)
                 new_state_dict = {}
-                pretrained_state_dict = pretrained_model.state_dict()
-                for key in pretrained_state_dict:
+                pretrained_state_dict = model.state_dict()
+                for key, tensor in pretrained_state_dict.items():
                     if key not in self.vector:
                         print(f'Warning: key {key} is present in the pretrained state dict but not in the task vector')
                         continue
-                    new_state_dict[key] = pretrained_state_dict[key] + scaling_coef * self.vector[key]
-            pretrained_model.load_state_dict(new_state_dict, strict=False)
-            return pretrained_model
+                    new_state_dict[key] = tensor + scaling_coef * self.vector[key]
+                model.load_state_dict(new_state_dict, strict=False)
+            return model
+
         with torch.no_grad():
-            pretrained_model = torch.load(pretrained_checkpoint)
+            model = torch.load(pretrained_checkpoint)
             new_state_dict = {}
-            pretrained_state_dict = pretrained_model.state_dict()
-            for key in pretrained_state_dict:
+            pretrained_state_dict = model.state_dict()
+            for key, tensor in pretrained_state_dict.items():
                 if key not in self.vector:
                     print(f'Warning: key {key} is present in the pretrained state dict but not in the task vector')
                     continue
-                new_state_dict[key] = pretrained_state_dict[key] + scaling_coef * self.vector[key]
-        pretrained_model.load_state_dict(new_state_dict, strict=False)
-        return pretrained_model
+                new_state_dict[key] = tensor + scaling_coef * self.vector[key]
+            model.load_state_dict(new_state_dict, strict=False)
+        return model
 
